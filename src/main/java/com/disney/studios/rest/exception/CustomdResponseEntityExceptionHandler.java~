@@ -1,0 +1,47 @@
+/*
+ * Copyright (c) 2019. copyright text here
+ */
+
+package com.disney.studios.rest.exception;
+
+import java.util.Date;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+
+@ControllerAdvice
+public class CustomdResponseEntityExceptionHandler extends ResponseEntityExceptionHandler {
+
+    @ExceptionHandler(Exception.class)
+    public final ResponseEntity<Object> handleAllExceptions(Exception ex, WebRequest request) {
+        // TODO how do I hit this
+        com.disney.studios.rest.exception.ExceptionResponse exceptionResponse = new com.disney.studios.rest.exception.ExceptionResponse(new Date(), ex.getMessage(),
+            request.getDescription(false), HttpStatus.INTERNAL_SERVER_ERROR);
+        return new ResponseEntity(exceptionResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(
+        MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatus status, WebRequest request) {
+        com.disney.studios.rest.exception.ExceptionResponse exceptionResponse = new com.disney.studios.rest.exception.ExceptionResponse(new Date(), "Validation failed",
+            ex.getBindingResult().toString(), HttpStatus.BAD_REQUEST);
+        // TODO refine the exception response
+        return new ResponseEntity(exceptionResponse, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(com.disney.studios.rest.exception.ImageResourceNotFoundException.class)
+    public final ResponseEntity<Object> handleUserNotFoundException(com.disney.studios.rest.exception.ImageResourceNotFoundException ex, WebRequest request) {
+        com.disney.studios.rest.exception.ExceptionResponse exceptionResponse = new com.disney.studios.rest.exception.ExceptionResponse(new Date(), ex.getMessage(),
+            "Image resource with given ID does not exist", HttpStatus.NOT_FOUND);
+        return new ResponseEntity(exceptionResponse, HttpStatus.NOT_FOUND);
+    }
+
+    // TODO remove the long forms of com.disney.....YUK
+}

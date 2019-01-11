@@ -1,0 +1,8 @@
+spring.h2.console.enabled: true
+logging.level.org.hibernate.SQL: info
+
+spring.jackson.serialization.write-dates-as-timestamps: false
+spring.messages.basename: messages
+
+spring.jpa.show-sql: true
+logging.level.org.springframework: info

@@ -1,0 +1,157 @@
+/*
+ * Copyright (c) 2019. copyright text here
+ */
+
+package com.disney.studios.rest.controller;
+
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
+
+import org.mapstruct.Context;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PagedResourcesAssembler;
+import org.springframework.hateoas.Link;
+import org.springframework.hateoas.PagedResources;
+import org.springframework.hateoas.Resource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import com.disney.studios.dataaccess.entity.ImageEntity;
+import com.disney.studios.rest.exception.ImageResourceNotFoundException;
+import com.disney.studios.rest.resource.ImageResource;
+import com.disney.studios.service.ImageService;
+
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiResponse;
+import io.swagger.annotations.ApiResponses;
+
+
+@RestController
+@Api(value = "ImageResource")
+@RequestMapping(value = {"/api/v1/images"})
+public class ImageResourceController {
+
+    @Autowired
+    private ImageService imageService;
+
+    private static final Logger LOG = LoggerFactory.getLogger(ImageResourceController.class);
+
+    @GetMapping()
+    @ApiOperation(value = "Get list of all images")
+    @ApiResponses(value = {
+        @ApiResponse(code = HttpURLConnection.HTTP_OK, message = "The request was successful"),
+        @ApiResponse(code = HttpURLConnection.HTTP_BAD_REQUEST, message = "The request is not valid."),
+        @ApiResponse(code = HttpURLConnection.HTTP_FORBIDDEN, message = "The requester is not authenticated to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_UNAUTHORIZED, message = "The requester is not authorized to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_INTERNAL_ERROR, message = "Any server error that prevented the completion of the request.")})
+    public ResponseEntity<PagedResources<ImageResource>> getAllImages(
+        @RequestParam(required = false, value = "search") String search,
+        Pageable pageRequest,
+        PagedResourcesAssembler assembler) {
+
+        // TODO remove assembler if don't have resource/model/entity
+        Page<ImageEntity> entities = imageService.getAllImages(search, pageRequest);
+        System.out.println("DEBUG: entities: " + entities + " search:" + search + " pageRequest:" + pageRequest);
+        List<ImageResource> imageResources = entities.getContent().stream()
+            .map(cur -> {
+                return new ImageResource(cur.getId(), cur.getDescription(), cur.getFilePath(), cur.getImage(), cur.getAttributes());
+            }).collect(Collectors.toList());
+
+        Page<ImageResource> resources = new PageImpl(imageResources, entities.getPageable(), entities.getTotalElements());
+        return new ResponseEntity<>(assembler.toResource(resources), HttpStatus.OK);
+
+        // NOTE The conversion of a Page to a PagedResources is done by an implementation of the Spring HATEOAS ResourceAssembler interface, the PagedResourcesAssembler.
+        // https://docs.spring.io/spring-data/data-commons/docs/1.6.1.RELEASE/reference/html/repositories.html
+    }
+
+    @PostMapping(consumes = {MediaType.APPLICATION_JSON_VALUE})
+    @ApiOperation(value = "Add an image")
+    @ApiResponses(value = {
+        @ApiResponse(code = HttpURLConnection.HTTP_CREATED, message = "Image was successfully saved."),
+        @ApiResponse(code = HttpURLConnection.HTTP_BAD_REQUEST, message = "The request is not valid."),
+        @ApiResponse(code = HttpURLConnection.HTTP_FORBIDDEN, message = "The requester is not authenticated to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_UNAUTHORIZED, message = "The requester is not authorized to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_INTERNAL_ERROR, message = "Any server error that prevented the completion of the request.")})
+    public ResponseEntity<Resource<ImageResource>> addImage(
+        @Valid @RequestBody ImageResource resource,
+        @Context HttpServletRequest request,
+        @Context HttpServletResponse response) {
+        ImageEntity imageEntity = imageService.addImage(new ImageEntity(
+            resource.getDescription(), resource.getFilePath(), resource.getImage(), resource.getAttributes()));
+
+        Resource<ImageResource> imageResource = new Resource<>(new ImageResource(
+            imageEntity.getId(), imageEntity.getDescription(), imageEntity.getFilePath(), imageEntity.getImage(), imageEntity.getAttributes()));
+
+        URI location = ServletUriComponentsBuilder
+            .fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(imageResource.getContent().getId()).toUri();
+
+        imageResource.add(new Link(location.toString(), "self"));
+
+        return new ResponseEntity<>(imageResource, HttpStatus.CREATED);
+    }
+
+    @DeleteMapping(value = "/{id}")
+    @ApiOperation(value = "Delete an image")
+    @ApiResponses(value = {
+        @ApiResponse(code = HttpURLConnection.HTTP_NO_CONTENT, message = "Resource(s) deleted"),
+        @ApiResponse(code = HttpURLConnection.HTTP_BAD_REQUEST, message = "The request is not valid."),
+        @ApiResponse(code = HttpURLConnection.HTTP_FORBIDDEN, message = "The requester is not authenticated to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_UNAUTHORIZED, message = "The requester is not authorized to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_INTERNAL_ERROR, message = "Any server error that prevented the completion of the request.")})
+    public ResponseEntity<Void> deleteImage(@PathVariable(required = true, value = "id") String id) {
+        imageService.delete(Long.valueOf(id));
+        return ResponseEntity.noContent().build();
+        // TODO make idempotent.  Capture repoistiory error which throws 500 if not found
+    }
+
+
+    @GetMapping()
+    @RequestMapping(value = "/{id}")
+    @ApiOperation(value = "Get an image")
+    @ApiResponses(value = {
+        @ApiResponse(code = HttpURLConnection.HTTP_OK, message = "The request was successful"),
+        @ApiResponse(code = HttpURLConnection.HTTP_BAD_REQUEST, message = "The request is not valid."),
+        @ApiResponse(code = HttpURLConnection.HTTP_FORBIDDEN, message = "The requester is not authenticated to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_UNAUTHORIZED, message = "The requester is not authorized to perform this operation."),
+        @ApiResponse(code = HttpURLConnection.HTTP_INTERNAL_ERROR, message = "Any server error that prevented the completion of the request.")})
+    public ResponseEntity<ImageResource> getImageById(
+        @PathVariable(required = true, value = "id") String id,
+        PagedResourcesAssembler assembler) {
+        Optional<ImageEntity> entity = imageService.getImageById(Long.valueOf(id));
+        if (entity.isPresent()) {
+            ImageResource resource = new ImageResource(entity.get().getId(), entity.get().getDescription(), entity.get().getFilePath(), entity.get().getImage(), entity.get().getAttributes());
+            return new ResponseEntity<>(resource, HttpStatus.OK);
+        } else {
+            LOG.warn("image resource does not exist. Id: {} ", id);
+            throw new ImageResourceNotFoundException();
+        }
+    }
+    // NOTE The conversion of a Page to a PagedResources is done by an implementation of the Spring HATEOAS ResourceAssembler interface, the PagedResourcesAssembler.
+    // https://docs.spring.io/spring-data/data-commons/docs/1.6.1.RELEASE/reference/html/repositories.html
+}
+
